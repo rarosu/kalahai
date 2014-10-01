@@ -63,6 +63,12 @@
 // The socket connected to the server.
 SOCKET client_socket = INVALID_SOCKET;
 
+// The buffer that holds all received data from the server.
+char receive_buffer[RECEIVE_BUFFER_SIZE];
+
+// Specifies where in the receive buffer we should start writing the next incoming characters.
+char* receive_ptr = receive_buffer;
+
 // Our player ID, as given to us by the server.
 unsigned int player_id = 0;
 
@@ -88,6 +94,14 @@ int kai_shutdown_socket(void);
 	command should be a null-terminated string.
 */
 int kai_send_command(const char* command);
+
+/**
+	Block until we received a single command (marked by a newline) and 
+	copy it to the command parameter. Newline will be excluded.
+
+	The command parameter must be at least COMMAND_MAX_SIZE bytes.
+*/
+int kai_receive_command(char* command);
 
 /**
 	Parse and handle an incoming command.
@@ -289,6 +303,59 @@ int kai_send_command(const char* command)
 	}
 
 	return 0;
+}
+
+int kai_receive_command(char* command)
+{
+	int result;
+	char* c;
+
+	// Tells us how many more chars we can write in our receive buffer.
+	size_t remaining_receive_size;
+	
+	// The size of the received command (excluding the null-terminator).
+	size_t received_command_size = 0;
+	
+	while (1)
+	{
+		remaining_receive_size = RECEIVE_BUFFER_SIZE - (receive_ptr - receive_buffer);
+		result = recv(client_socket, receive_ptr, remaining_receive_size, 0);
+
+		if (result == 0)
+		{
+			return 1;
+		}
+
+		if (result < 0)
+		{
+			fprintf(stderr, "recv failed: %d", WSAGetLastError());
+			return 1;
+		}
+
+		receive_ptr += result;
+
+		for (c = receive_buffer; c != receive_ptr; ++c)
+		{
+			if (*c == '\n')
+			{
+				if (*(c - 1) == '\r')
+				{
+					// Copy the command to the out parameter.
+					received_command_size = c - receive_buffer;
+					if (*(c - 1) == '\r')
+						--received_command_size;
+
+					memcpy(command, receive_buffer, received_command_size);
+					command[received_command_size] = '\0';
+
+					// Overwrite the message with the remaining data in the receive buffer.
+					memcpy(receive_buffer, c + 1, RECEIVE_BUFFER_SIZE - ((c + 1) - receive_buffer));
+				}
+
+				return 0;
+			}
+		}
+	}
 }
 
 int kai_handle_command(const char* command)
