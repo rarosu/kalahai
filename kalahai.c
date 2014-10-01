@@ -1,5 +1,5 @@
 #define WIN32_LEAN_AND_MEAN
-#define _WIN32_WINNT 0x501
+//#define _WIN32_WINNT 0x501
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <winsock2.h>
@@ -62,6 +62,9 @@
 
 // The socket connected to the server.
 SOCKET client_socket = INVALID_SOCKET;
+
+// Our player ID, as given to us by the server.
+unsigned int player_id = 0;
 
 
 
@@ -290,12 +293,19 @@ int kai_send_command(const char* command)
 
 int kai_handle_command(const char* command)
 {
-	const char* c;
-	const char* id;
+	int n;
 	
-	fprintf(stdout, "Received command: %s", command);
-	c = strchr(command, ' ');
+	fprintf(stdout, "Received command: %s\n", command);
+	n = strchr(command, ' ') - command;
 
+	if (strncmp(command, COMMAND_HELLO, n) == 0)
+	{
+		sscanf(command, "%*s %u", &player_id);
+		fprintf(stdout, "I'm player %u\n", player_id);
+
+		// Query whose move it is.
+		kai_send_command(COMMAND_NEXT_PLAYER);
+	}
 
 	return 0;
 }
