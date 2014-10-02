@@ -23,17 +23,20 @@
 
 // Move command (client to server). Format "MOVE x y", where x is the ambo number (1 - 6, inclusive) and y is our player ID (both integers).
 // ERROR_GAME_NOT_FULL if game is not full.
+// ERROR_INVALID_PARAMS if an invalid number of parameters are sent or they are misformatted.
 // ERROR_INVALID_MOVE if the selected ambo is out of bounds.
 // ERROR_WRONG_PLAYER if it is not our turn.
 // ERROR_AMBO_EMPTY if the selected ambo is empty.
+// If the move is valid, the board state is returned. See COMMAND_MOVE for board state format.
 #define COMMAND_MOVE "MOVE"
 
 // Connect command (both ways). Send to server as "HELLO". Server will respond with "HELLO x", where x is our player ID.
 // No errors can be returned. Socket will instead be closed if the game is full.
 #define COMMAND_HELLO "HELLO"
 
-// Retrieve game board state (client to server). Format "BOARD". Retrieves board game data as "x;x;x;x;x;x;x;x;x;x;x;x;x;x;y",
-// where x is the number of seeds in the given board place and y is the player ID of the player who should make the current move.
+// Retrieve game board state (client to server). Format "BOARD". Retrieves board game data as "NH;s;s;s;s;s;s;SH;n;n;n;n;n;n;y",
+// Where s/n is the number of seeds in the given board place for south and north respectively. NH and SH is the number of seeds in the north and south house respectively.
+// y is the current player.
 // No errors can be returned.
 #define COMMAND_BOARD "BOARD"
 
@@ -83,10 +86,17 @@ char* receive_ptr = receive_buffer;
 // Our player ID, as given to us by the server.
 unsigned int player_id = PLAYER_NONE;
 
-// The first ambo that is ours (0 for player 1, 7 for player 2).
+// The first ambo that is ours (0 for player 1 (south), 7 for player 2 (north)).
 unsigned int first_ambo;
 
-// The number of tokens in every ambo (one index for each ambo).
+/**
+	The number of seeds in every ambo (one index for each ambo).
+	Formatted such that:
+		board_state[0] through board_state[5] = The number of seeds in the south ambos.
+		board_state[6] = The number of seeds in the south house.
+		board_state[7] through board_state[12] = The number of seeds in the north ambos.
+		board_state[13] = The number of seeds in the north house.
+*/
 unsigned char board_state[14];
 
 
@@ -259,10 +269,10 @@ int kai_shutdown_socket(void)
 int kai_run(void)
 {
 	// The winner of the game (0 if no one has won yet).
-	unsigned int winner = PLAYER_NONE;
+	int winner = PLAYER_NONE;
 
 	// The player whose turn it was last time we checked.
-	unsigned int current_player = PLAYER_NONE;
+	int current_player = PLAYER_NONE;
 
 	// The move the AI elected to make.
 	int move = -1;
@@ -327,6 +337,39 @@ int kai_run(void)
 
 				sprintf(command_buffer, "%s %d %d\n", COMMAND_MOVE, move, player_id);
 				if (kai_send_command(command_buffer) != 0) return 1;
+				if (kai_receive_command(command_buffer) != 0) return 1;
+
+				if (strcmp(command_buffer, ERROR_GAME_NOT_FULL) == 0) 
+				{ 
+					fprintf(stdout, "Cannot move. Game not full"); 
+					return 1; 
+				}
+
+				if (strcmp(command_buffer, ERROR_INVALID_PARAMS) == 0)
+				{
+					fprintf(stdout, "Cannot move. Invalid params");
+					return 1;
+				}
+
+				if (strcmp(command_buffer, ERROR_INVALID_MOVE) == 0) 
+				{
+					fprintf(stdout, "Cannot move. Invalid move.");
+					return 1;						
+				}
+
+				if (strcmp(command_buffer, ERROR_WRONG_PLAYER) == 0) 
+				{
+					fprintf(stdout, "Cannot move. Wrong player.");
+					return 1;
+				}
+
+				if (strcmp(command_buffer, ERROR_AMBO_EMPTY) == 0) 
+				{
+					fprintf(stdout, "Cannot move. Ambo empty.");
+					return 1;
+				}
+
+				kai_parse_board_state(command_buffer);
 			}
 		}
 	}
@@ -402,16 +445,15 @@ int kai_receive_command(char* command)
 
 int kai_parse_board_state(const char* board_string)
 {
+	int i;
 	const char* c;
-	unsigned char ambo = 0;
-
-	for (c = board_string; *c != '\n', ambo != 14; c++)
+	
+	for (i = 0, c = board_string; i < 14; ++i, c += 2)
 	{
-		if (*c == ';')
-			continue;
-
-		board_state[ambo] = *c - '0';
-		ambo++;
+		if (i == 0) board_state[13] = *c - '0';
+		if (i >= 1 && i <= 6) board_state[i - 1] = *c - '0';
+		if (i == 7) board_state[i - 1] = *c - '0';
+		if (i >= 8 && i <= 13) board_state[i - 1] = *c - '0';
 	}
 
 	return 0;
@@ -419,7 +461,7 @@ int kai_parse_board_state(const char* board_string)
 
 int kai_random_make_move(void)
 {
-	int i;
+	unsigned int i;
 	for (i = first_ambo; i < first_ambo + 6; ++i)
 	{
 		if (board_state[i] != 0)
