@@ -6,6 +6,12 @@
 #include <ws2tcpip.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+
+/**
+	STRUCTURES
+*/
+
 
 /**
 	CONSTANTS
@@ -23,10 +29,12 @@
 #define COMMAND_MOVE "MOVE"
 
 // Connect command (both ways). Send to server as "HELLO". Server will respond with "HELLO x", where x is our player ID.
+// No errors can be returned. Socket will instead be closed if the game is full.
 #define COMMAND_HELLO "HELLO"
 
 // Retrieve game board state (client to server). Format "BOARD". Retrieves board game data as "x;x;x;x;x;x;x;x;x;x;x;x;x;x;y",
 // where x is the number of seeds in the given board place and y is the player ID of the player who should make the current move.
+// No errors can be returned.
 #define COMMAND_BOARD "BOARD"
 
 // Returns the current player that will make a move (client to server). Format "PLAYER". Server responds with "x", where x is the player ID.
@@ -50,6 +58,9 @@
 #define ERROR_WRONG_PLAYER "ERROR WRONG_PLAYER"
 #define ERROR_AMBO_EMPTY "ERROR AMBO_EMPTY"
 
+// Special player ID.
+#define PLAYER_NONE 0
+
 // Define default values.
 #define DEFAULT_PORT "10101"
 #define DEFAULT_SERVER_ADDRESS "127.0.0.1"
@@ -70,7 +81,10 @@ char receive_buffer[RECEIVE_BUFFER_SIZE];
 char* receive_ptr = receive_buffer;
 
 // Our player ID, as given to us by the server.
-unsigned int player_id = 0;
+unsigned int player_id = PLAYER_NONE;
+
+// The number of pebbles in every ambo (one index for every ambo).
+unsigned char board_state[14];
 
 
 
@@ -89,6 +103,13 @@ int kai_open_socket(void);
 int kai_shutdown_socket(void);
 
 /**
+	Run the game and communicate with the server.
+
+	Returns 0 on success, 1 on failure.
+*/
+int kai_run(void);
+
+/**
 	Send a fully formatted command to the server.
 
 	command should be a null-terminated string.
@@ -104,13 +125,12 @@ int kai_send_command(const char* command);
 int kai_receive_command(char* command);
 
 /**
-	Parse and handle an incoming command.
+	Parse a board state and store it as the current board state.
 
-	The command parameter will not be null-terminated, but instead terminated with '\n' due to the protocol.
-
-	Return 0 on success, 1 on quit.
+	Returns 0 on success. Currently, board_string is assumed to be properly formatted,
+	so this function will always return 0.
 */
-int kai_handle_command(const char* command);
+int kai_parse_board_state(const char* board_string);
 
 
 /**
@@ -118,93 +138,28 @@ int kai_handle_command(const char* command);
 */
 int main(int argc, char* argv[])
 {
-	int result;
-	char* c;
-
-	// The buffer that holds all received data from the server.
-	char receive_buffer[RECEIVE_BUFFER_SIZE];
-
-	// The buffer that holds the last received command (null-terminated).
-	char received_command[COMMAND_MAX_SIZE];
-
-	// The size of the received command (excluding the null-terminator).
-	size_t received_command_size = 0;
-
-	// Specifies where in the receive buffer we should start writing the next incoming characters.
-	char* receive_ptr = receive_buffer;
-
-	// Specifies where the last newline was found within the receive buffer. Which means where the last command is starting.
-	char* last_command = receive_buffer;
-
-	// Tells us how many more chars we can write in our receive buffer.
-	size_t remaining_receive_size = RECEIVE_BUFFER_SIZE;
-
-	// The number of bytes of any incomplete message (not fully received) still in the receive buffer.
-	size_t remaining_command_size = 0;
-
-	// The buffer that holds the string we're going to send. For construction of messages.
-	char send_buffer[COMMAND_MAX_SIZE];
-
-
 	// Open the connection.
 	if (kai_open_socket() != 0)
-		return 1;
-
-	// Send the starting message.
-	sprintf(send_buffer, "%s\n", COMMAND_HELLO);
-	kai_send_command(send_buffer);
-
-	// Start receiving and handling messages.
-	do
 	{
-		result = recv(client_socket, receive_ptr, remaining_receive_size, 0);
+		getchar();
+		return 1;
+	}
 
-		if (result == 0)
-		{
-			// Connection was closed by the other peer.
-			fprintf(stdout, "Connection closed by the other peer.");
-			break;
-		}
-
-		if (result < 0)
-		{
-			// An error occurred.
-			fprintf(stderr, "recv failed: %d\n", WSAGetLastError());
-			break;
-		}
-
-		receive_ptr += result;
-		remaining_receive_size -= result;
-
-		// Parse any full commands in the receive buffer.
-		last_command = receive_buffer;
-		for (c = receive_buffer; c != receive_ptr; ++c)
-		{
-			if (*c == '\n')
-			{
-				received_command_size = c - last_command;
-				if (*(c - 1) == '\r')
-					--received_command_size;
-				memcpy(received_command, last_command, received_command_size);
-				received_command[received_command_size] = '\0';
-
-				if (kai_handle_command(received_command) == 1)
-					break;
-				last_command = c + 1;
-			}
-		}
-
-		// Overwrite old commands with the newer content in the receive buffer.
-		remaining_command_size = receive_ptr - last_command;
-		memcpy(receive_buffer, last_command, remaining_command_size);
-		receive_ptr = receive_buffer + remaining_command_size;
-		remaining_receive_size = RECEIVE_BUFFER_SIZE - remaining_command_size;
-	} while (1);
+	// Run through the game.
+	if (kai_run() != 0)
+	{
+		getchar();
+		return 1;
+	}
 
 	// Shutdown the connection.
 	if (kai_shutdown_socket() != 0)
+	{
+		getchar();
 		return 1;
+	}
 
+	getchar();
     return 0;
 }
 
@@ -291,6 +246,71 @@ int kai_shutdown_socket(void)
 	return 0;
 }
 
+int kai_run(void)
+{
+	// The winner of the game (0 if no one has won yet).
+	unsigned int winner = PLAYER_NONE;
+
+	// The player whose turn it was last time we checked.
+	unsigned int current_player = PLAYER_NONE;
+
+	// A buffer for holding messages we send/receive.
+	char command_buffer[COMMAND_MAX_SIZE];
+
+	// Send the greetings message and retrieve our player ID.
+	sprintf(command_buffer, "%s\n", COMMAND_HELLO);
+	if (kai_send_command(command_buffer) != 0) return 1;
+	if (kai_receive_command(command_buffer) != 0) return 1;
+	sscanf(command_buffer, "%*s %d", &player_id);
+
+	while (1)
+	{
+		// Check if there is a winner.
+		sprintf(command_buffer, "%s\n", COMMAND_WINNER);
+		if (kai_send_command(command_buffer) != 0) return 1;
+		if (kai_receive_command(command_buffer) != 0) return 1;
+		if (strcmp(command_buffer, ERROR_GAME_NOT_FULL) != 0)
+		{
+			sscanf(command_buffer, "%d", &winner);
+			if (winner != -1)
+			{
+				// Print the winner and break out from the game loop.
+				fprintf(stdout, "Winner: %d. ", winner);
+				
+				if (winner == 0)
+					fprintf(stdout, "Even game.\n");
+				else if (winner == player_id)
+					fprintf(stdout, "We won.\n");
+				else
+					fprintf(stdout, "We lost.\n");
+
+				break;
+			}
+		}
+
+		// Check if it is our turn.
+		sprintf(command_buffer, "%s\n", COMMAND_NEXT_PLAYER);
+		if (kai_send_command(command_buffer) != 0) return 1;
+		if (kai_receive_command(command_buffer) != 0) return 1;
+		if (strcmp(command_buffer, ERROR_GAME_NOT_FULL) != 0)
+		{
+			sscanf(command_buffer, "%d", &current_player);
+			if (current_player == player_id)
+			{
+				// Update the board data.
+				sprintf(command_buffer, "%s\n", COMMAND_BOARD);
+				if (kai_send_command(command_buffer) != 0) return 1;
+				if (kai_receive_command(command_buffer) != 0) return 1;
+				kai_parse_board_state(command_buffer);
+			
+				// TODO: Make our move here!
+			}
+		}
+	}
+
+	return 0;
+}
+
 int kai_send_command(const char* command)
 {
 	int result;
@@ -314,7 +334,7 @@ int kai_receive_command(char* command)
 	size_t remaining_receive_size;
 	
 	// The size of the received command (excluding the null-terminator).
-	size_t received_command_size = 0;
+	size_t received_command_size;
 	
 	while (1)
 	{
@@ -323,6 +343,7 @@ int kai_receive_command(char* command)
 
 		if (result == 0)
 		{
+			fprintf(stdout, "Connection lost");
 			return 1;
 		}
 
@@ -338,19 +359,17 @@ int kai_receive_command(char* command)
 		{
 			if (*c == '\n')
 			{
+				// Copy the command to the out parameter.
+				received_command_size = c - receive_buffer;
 				if (*(c - 1) == '\r')
-				{
-					// Copy the command to the out parameter.
-					received_command_size = c - receive_buffer;
-					if (*(c - 1) == '\r')
-						--received_command_size;
+					--received_command_size;
 
-					memcpy(command, receive_buffer, received_command_size);
-					command[received_command_size] = '\0';
+				memcpy(command, receive_buffer, received_command_size);
+				command[received_command_size] = '\0';
 
-					// Overwrite the message with the remaining data in the receive buffer.
-					memcpy(receive_buffer, c + 1, RECEIVE_BUFFER_SIZE - ((c + 1) - receive_buffer));
-				}
+				// Overwrite the message with the remaining data in the receive buffer.
+				memcpy(receive_buffer, c + 1, receive_ptr - (c + 1));
+				receive_ptr -= (c + 1) - receive_buffer;
 
 				return 0;
 			}
@@ -358,20 +377,18 @@ int kai_receive_command(char* command)
 	}
 }
 
-int kai_handle_command(const char* command)
+int kai_parse_board_state(const char* board_string)
 {
-	int n;
-	
-	fprintf(stdout, "Received command: %s\n", command);
-	n = strchr(command, ' ') - command;
+	const char* c;
+	unsigned char ambo = 0;
 
-	if (strncmp(command, COMMAND_HELLO, n) == 0)
+	for (c = board_string; *c != '\n', ambo != 14; c++)
 	{
-		sscanf(command, "%*s %u", &player_id);
-		fprintf(stdout, "I'm player %u\n", player_id);
+		if (*c == ';')
+			continue;
 
-		// Query whose move it is.
-		kai_send_command(COMMAND_NEXT_PLAYER);
+		board_state[ambo] = *c - '0';
+		ambo++;
 	}
 
 	return 0;
