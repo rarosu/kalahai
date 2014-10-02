@@ -83,7 +83,10 @@ char* receive_ptr = receive_buffer;
 // Our player ID, as given to us by the server.
 unsigned int player_id = PLAYER_NONE;
 
-// The number of pebbles in every ambo (one index for every ambo).
+// The first ambo that is ours (0 for player 1, 7 for player 2).
+unsigned int first_ambo;
+
+// The number of tokens in every ambo (one index for each ambo).
 unsigned char board_state[14];
 
 
@@ -131,6 +134,13 @@ int kai_receive_command(char* command);
 	so this function will always return 0.
 */
 int kai_parse_board_state(const char* board_string);
+
+/**
+	Makes a random move from a valid ambo. This is for testing only (since it is a bad strategy).
+
+	Returns the ambo to make a move from (indexed 1 to 6). Returns -1 on error.
+*/
+int kai_random_make_move(void);
 
 
 /**
@@ -254,6 +264,9 @@ int kai_run(void)
 	// The player whose turn it was last time we checked.
 	unsigned int current_player = PLAYER_NONE;
 
+	// The move the AI elected to make.
+	int move = -1;
+
 	// A buffer for holding messages we send/receive.
 	char command_buffer[COMMAND_MAX_SIZE];
 
@@ -262,6 +275,10 @@ int kai_run(void)
 	if (kai_send_command(command_buffer) != 0) return 1;
 	if (kai_receive_command(command_buffer) != 0) return 1;
 	sscanf(command_buffer, "%*s %d", &player_id);
+	if (player_id == 0)
+		first_ambo = 0;
+	else
+		first_ambo = 7;
 
 	while (1)
 	{
@@ -304,6 +321,12 @@ int kai_run(void)
 				kai_parse_board_state(command_buffer);
 			
 				// TODO: Make our move here!
+				move = kai_random_make_move();
+				if (move == -1) return 1;
+				fprintf(stdout, "Making move: %d\n", move);
+
+				sprintf(command_buffer, "%s %d %d\n", COMMAND_MOVE, move, player_id);
+				if (kai_send_command(command_buffer) != 0) return 1;
 			}
 		}
 	}
@@ -392,4 +415,16 @@ int kai_parse_board_state(const char* board_string)
 	}
 
 	return 0;
+}
+
+int kai_random_make_move(void)
+{
+	int i;
+	for (i = first_ambo; i < first_ambo + 6; ++i)
+	{
+		if (board_state[i] != 0)
+			return i - first_ambo + 1;
+	}
+
+	return -1;
 }
