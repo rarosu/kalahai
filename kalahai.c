@@ -9,7 +9,63 @@
 #include <stdlib.h>
 
 /**
-	STRUCTURES
+	STRUCTURES & TYPEDEFS
+*/
+
+typedef signed char player_id_t;
+
+/**
+	The type for an evaluation value.
+*/
+typedef signed char evaluation_t;
+
+/**
+	The type for holding the number of seeds in one ambo.
+*/
+typedef unsigned char ambo_t;
+
+/**
+	The index type for accessing an ambo.
+*/
+typedef unsigned char ambo_index_t;
+
+/**
+	Describes the board state (i.e. how many seeds there are in every ambo).
+*/
+struct board_state_t
+{
+	/**
+	The number of seeds in every ambo (one index for each ambo).
+	Formatted such that:
+		board_state[0] through board_state[5] = The number of seeds in the south ambos.
+		board_state[6] = The number of seeds in the south house.
+		board_state[7] through board_state[12] = The number of seeds in the north ambos.
+		board_state[13] = The number of seeds in the north house.
+	*/
+	ambo_t seeds[14];
+};
+
+/**
+	The state of a minimax tree node.
+*/
+struct minimax_node_t
+{
+	// The state of the board.
+	struct board_state_t state;
+
+	// The evaluation value for our position.
+	evaluation_t evaluation;
+};
+
+/**
+	A linked list of all child nodes to a minimax node.
+*/
+/*
+struct minimax_child_list_t
+{
+	minimax_node_t* child;
+	minimax_child_list_t* next;
+};
 */
 
 
@@ -84,20 +140,13 @@ char receive_buffer[RECEIVE_BUFFER_SIZE];
 char* receive_ptr = receive_buffer;
 
 // Our player ID, as given to us by the server.
-unsigned int player_id = PLAYER_NONE;
+player_id_t player_id = PLAYER_NONE;
 
 // The first ambo that is ours (0 for player 1 (south), 7 for player 2 (north)).
-unsigned int first_ambo;
+ambo_index_t first_ambo;
 
-/**
-	The number of seeds in every ambo (one index for each ambo).
-	Formatted such that:
-		board_state[0] through board_state[5] = The number of seeds in the south ambos.
-		board_state[6] = The number of seeds in the south house.
-		board_state[7] through board_state[12] = The number of seeds in the north ambos.
-		board_state[13] = The number of seeds in the north house.
-*/
-unsigned char board_state[14];
+// The state of the board as given to us by the server.
+struct board_state_t board_state;
 
 
 
@@ -156,6 +205,32 @@ int kai_parse_board_state(const char* board_string);
 	Returns the ambo to make a move from (indexed 1 to 6). Returns -1 on error.
 */
 int kai_random_make_move(void);
+
+/**
+	Make a move using the minimax algorithm.
+*/
+int kai_minimax_make_move(void);
+
+/**
+	Get the child nodes for all valid moves for the given player in the given state.
+
+	The children parameter will be filled with allocated child nodes or NULL for the invalid moves.
+*/
+int kai_minimax_get_child_nodes(player_id_t player, struct minimax_node_t* node, struct minimax_node_t* children[6]);
+
+/**
+	Allocate a new minimax node.
+*/
+struct minimax_node_t* kai_minimax_allocate_node();
+
+/**
+	Free a previously allocated minimax node.
+*/
+void kai_minimax_free_node(struct minimax_node_t* node);
+
+void kai_play_move(struct board_state_t* state, ambo_index_t ambo);
+
+//evaluation_t kai_minimax_expand_tree(
 
 
 /**
@@ -274,12 +349,12 @@ int kai_shutdown_socket(void)
 int kai_run(void)
 {
 	// The winner of the game (0 if no one has won yet).
-	int winner = PLAYER_NONE;
+	player_id_t winner = PLAYER_NONE;
 
 	// The player whose turn it was last time we checked.
-	int current_player = PLAYER_NONE;
+	player_id_t current_player = PLAYER_NONE;
 
-	// The move the AI elected to make.
+	// The move our AI elected to make.
 	int move = -1;
 
 	// A buffer for holding messages we send/receive.
@@ -337,10 +412,10 @@ int kai_run(void)
 				kai_parse_board_state(command_buffer);
 				fprintf(stdout, "Board State: %s\n", command_buffer);
 			
-				// TODO: Make our move here!
+				// Make our move here!
 				move = kai_random_make_move();
 				if (move == -1) return 1;
-				fprintf(stdout, "Making move: %d (Seeds in ambo %d)\n", move, board_state[move - 1 + first_ambo]);
+				fprintf(stdout, "Making move: %d (Seeds in ambo %d)\n", move, board_state.seeds[move - 1 + first_ambo]);
 
 				sprintf(command_buffer, "%s %d %d\n", COMMAND_MOVE, move, player_id);
 				if (kai_send_command(command_buffer) != 0) return 1;
@@ -471,7 +546,7 @@ int kai_parse_int(const char* number_string, int char_count)
 
 int kai_parse_board_state(const char* board_string)
 {
-	int i = 0;
+	ambo_index_t i = 0;
 	int number;
 	int number_size = 0;
 	const char* c;
@@ -487,10 +562,10 @@ int kai_parse_board_state(const char* board_string)
 			number_size = 0;
 			
 			// Interpret the number depending on its position.
-			if (i == 0) board_state[13] = number;
-			if (i >= 1 && i <= 6) board_state[i - 1] = number;
-			if (i == 7) board_state[i - 1] = number;
-			if (i >= 8 && i <= 13) board_state[i - 1] = number;
+			if (i == 0) board_state.seeds[13] = number;
+			if (i >= 1 && i <= 6) board_state.seeds[i - 1] = number;
+			if (i == 7) board_state.seeds[i - 1] = number;
+			if (i >= 8 && i <= 13) board_state.seeds[i - 1] = number;
 
 			i++;
 
@@ -505,12 +580,35 @@ int kai_parse_board_state(const char* board_string)
 
 int kai_random_make_move(void)
 {
-	unsigned int i;
+	ambo_index_t i;
 	for (i = first_ambo; i < first_ambo + 6; ++i)
 	{
-		if (board_state[i] != 0)
+		if (board_state.seeds[i] != 0)
 			return i - first_ambo + 1;
 	}
 
 	return -1;
+}
+
+int kai_minimax_make_move(void)
+{
+	struct minimax_node_t root;
+	memcpy(&root.state, &board_state, sizeof(board_state));
+
+	return -1;
+}
+
+int kai_minimax_get_child_nodes(player_id_t player, struct minimax_node_t* node, struct minimax_node_t* children[6])
+{
+	return 1;
+}
+
+struct minimax_node_t* kai_minimax_allocate_node()
+{
+	return (struct minimax_node_t*) malloc(sizeof(struct minimax_node_t));
+}
+
+void kai_minimax_free_node(struct minimax_node_t* node)
+{
+	free(node);
 }
