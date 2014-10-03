@@ -17,6 +17,12 @@ solution "kalahai"
 	project "kalahai"
 		kind "ConsoleApp"
 		language "C"
-		files "kalahai.c"
+		files { "kalahai.h", "kalahai.c", "kalahai_main.c" }
+		
+		links { "Ws2_32" }
+	project "kalahai_tests"
+		kind "ConsoleApp"
+		language "C"
+		files { "kalahai.h", "kalahai.c", "kalahai_test_main.c" }
 		
 		links { "Ws2_32" }
