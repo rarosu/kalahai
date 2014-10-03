@@ -138,6 +138,11 @@ int kai_send_command(const char* command);
 int kai_receive_command(char* command);
 
 /**
+	This will parse a number string of a specified length and convert it to an int.
+*/
+int kai_parse_int(const char* number_string, int char_count);
+
+/**
 	Parse a board state and store it as the current board state.
 
 	Returns 0 on success. Currently, board_string is assumed to be properly formatted,
@@ -285,10 +290,11 @@ int kai_run(void)
 	if (kai_send_command(command_buffer) != 0) return 1;
 	if (kai_receive_command(command_buffer) != 0) return 1;
 	sscanf(command_buffer, "%*s %d", &player_id);
-	if (player_id == 0)
+	if (player_id == 1)
 		first_ambo = 0;
 	else
 		first_ambo = 7;
+	fprintf(stdout, "Player ID: %d. First Ambo: %d\n", player_id, first_ambo);
 
 	while (1)
 	{
@@ -329,11 +335,12 @@ int kai_run(void)
 				if (kai_send_command(command_buffer) != 0) return 1;
 				if (kai_receive_command(command_buffer) != 0) return 1;
 				kai_parse_board_state(command_buffer);
+				fprintf(stdout, "Board State: %s\n", command_buffer);
 			
 				// TODO: Make our move here!
 				move = kai_random_make_move();
 				if (move == -1) return 1;
-				fprintf(stdout, "Making move: %d\n", move);
+				fprintf(stdout, "Making move: %d (Seeds in ambo %d)\n", move, board_state[move - 1 + first_ambo]);
 
 				sprintf(command_buffer, "%s %d %d\n", COMMAND_MOVE, move, player_id);
 				if (kai_send_command(command_buffer) != 0) return 1;
@@ -443,17 +450,54 @@ int kai_receive_command(char* command)
 	}
 }
 
+int kai_parse_int(const char* number_string, int char_count)
+{
+	const char* c;
+	int sum = 0;
+	int placevalue = 1;
+	int i;
+
+	for (i = 0; i < char_count - 1; ++i)
+		placevalue *= 10; 
+
+	for (c = number_string; c != number_string + char_count; ++c)
+	{
+		sum += (*c - '0') * placevalue;
+		placevalue /= 10;
+	}
+
+	return sum;
+}
+
 int kai_parse_board_state(const char* board_string)
 {
-	int i;
+	int i = 0;
+	int number;
+	int number_size = 0;
 	const char* c;
+	const char* number_string = board_string;
 	
-	for (i = 0, c = board_string; i < 14; ++i, c += 2)
+	for (c = board_string; *c != '\0'; c++)
 	{
-		if (i == 0) board_state[13] = *c - '0';
-		if (i >= 1 && i <= 6) board_state[i - 1] = *c - '0';
-		if (i == 7) board_state[i - 1] = *c - '0';
-		if (i >= 8 && i <= 13) board_state[i - 1] = *c - '0';
+		if (*c == ';')
+		{
+			// Convert the read number into an integer.
+			number = kai_parse_int(number_string, number_size);
+			number_string = c + 1;
+			number_size = 0;
+			
+			// Interpret the number depending on its position.
+			if (i == 0) board_state[13] = number;
+			if (i >= 1 && i <= 6) board_state[i - 1] = number;
+			if (i == 7) board_state[i - 1] = number;
+			if (i >= 8 && i <= 13) board_state[i - 1] = number;
+
+			i++;
+
+			continue;
+		}
+
+		number_size++;
 	}
 
 	return 0;
