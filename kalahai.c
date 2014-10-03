@@ -43,6 +43,9 @@ struct board_state_t
 		board_state[13] = The number of seeds in the north house.
 	*/
 	ambo_t seeds[14];
+
+	// The player that will make the next move.
+	player_id_t player;
 };
 
 /**
@@ -228,9 +231,11 @@ struct minimax_node_t* kai_minimax_allocate_node();
 */
 void kai_minimax_free_node(struct minimax_node_t* node);
 
-void kai_play_move(struct board_state_t* state, ambo_index_t ambo);
+/**
+	Given a board state, play a move.
+*/
+void kai_play_move(player_id_t player, struct board_state_t* state, ambo_index_t ambo);
 
-//evaluation_t kai_minimax_expand_tree(
 
 
 /**
@@ -351,9 +356,6 @@ int kai_run(void)
 	// The winner of the game (0 if no one has won yet).
 	player_id_t winner = PLAYER_NONE;
 
-	// The player whose turn it was last time we checked.
-	player_id_t current_player = PLAYER_NONE;
-
 	// The move our AI elected to make.
 	int move = -1;
 
@@ -402,8 +404,8 @@ int kai_run(void)
 		if (kai_receive_command(command_buffer) != 0) return 1;
 		if (strcmp(command_buffer, ERROR_GAME_NOT_FULL) != 0)
 		{
-			sscanf(command_buffer, "%d", &current_player);
-			if (current_player == player_id)
+			sscanf(command_buffer, "%d", &board_state.player);
+			if (board_state.player == player_id)
 			{
 				// Update the board data.
 				sprintf(command_buffer, "%s\n", COMMAND_BOARD);
@@ -575,6 +577,9 @@ int kai_parse_board_state(const char* board_string)
 		number_size++;
 	}
 
+	// Parse the current player
+	board_state.player = kai_parse_int(number_string, number_size);
+
 	return 0;
 }
 
@@ -611,4 +616,9 @@ struct minimax_node_t* kai_minimax_allocate_node()
 void kai_minimax_free_node(struct minimax_node_t* node)
 {
 	free(node);
+}
+
+void kai_play_move(player_id_t player, struct board_state_t* state, ambo_index_t ambo)
+{
+
 }
