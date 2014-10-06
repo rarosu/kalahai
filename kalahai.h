@@ -18,7 +18,7 @@ typedef signed char player_id_t;
 /**
 	The type for an evaluation value.
 */
-typedef signed char evaluation_t;
+typedef signed short evaluation_t;
 
 /**
 	The type for holding the number of seeds in one ambo.
@@ -57,8 +57,11 @@ struct minimax_node_t
 	// The state of the board.
 	struct board_state_t state;
 
-	// The evaluation value for our position.
-	evaluation_t evaluation;
+	// The alpha parameter for the alpha-beta pruning.
+	evaluation_t alpha;
+
+	// The beta parameter for the alpha-beta pruning.
+	evaluation_t beta;
 };
 
 
@@ -129,6 +132,8 @@ struct minimax_node_t
 
 // Define minimax constants
 #define MINIMAX_MAX_DEPTH 5
+#define MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT 4
+#define MINIMAX_EVALUATION_EMPTY_AMBO_WEIGHT 2
 
 
 
@@ -224,7 +229,7 @@ int kai_minimax_make_move(void);
 int kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth);
 
 /**
-	Calculate the evaluation value for a given board state.
+	Calculate the evaluation (heuristic) value for a given board state.
 */
 int kai_minimax_node_evaluation(const struct board_state_t* state);
 

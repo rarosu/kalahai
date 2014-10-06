@@ -338,6 +338,8 @@ int kai_minimax_make_move(void)
 {
 	struct minimax_node_t root;
 	memcpy(&root.state, &board_state, sizeof(board_state));
+	root.alpha = -SHRT_MIN;
+	root.beta = SHRT_MAX;
 
 	kai_minimax_expand_node(&root, MINIMAX_MAX_DEPTH);
 
@@ -346,34 +348,99 @@ int kai_minimax_make_move(void)
 
 int kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth)
 {
-	if (depth == 0)
-		return 0;
-
-	ambo_index_t start = (node->state.player == 1) ? SOUTH_START : NORTH_START;
+	ambo_index_t start;
 	ambo_index_t ambo;
-	for (ambo = start; ambo != start + 6; ambo++)
+
+	if (depth == 0)
+		return kai_minimax_node_evaluation(&node->state);
+
+	start = (node->state.player == 1) ? SOUTH_START : NORTH_START;
+	
+	if (player_id == node->state.player)
 	{
-		if (node->state.seeds[ambo] != 0)
+		// Maximize alpha
+		for (ambo = start; ambo != start + 6; ambo++)
 		{
-			struct minimax_node_t child;
-			memcpy(&child, node, sizeof(child));
+			if (node->state.seeds[ambo] != 0)
+			{
+				struct minimax_node_t child;
+				memcpy(&child, node, sizeof(child));
 
-			kai_play_move(&child.state, ambo);
+				kai_play_move(&child.state, ambo);
 
-			kai_minimax_expand_node(&child, depth - 1);
+				node->alpha = max(node->alpha, kai_minimax_expand_node(&child, depth - 1));
+				if (node->beta <= node->alpha)
+					break;
+			}
+		}
+
+		return node->alpha;
+	}
+	else
+	{
+		// Minimize beta
+		for (ambo = start; ambo != start + 6; ambo++)
+		{
+			if (node->state.seeds[ambo] != 0)
+			{
+				struct minimax_node_t child;
+				memcpy(&child, node, sizeof(child));
+
+				kai_play_move(&child.state, ambo);
+
+				node->beta = min(node->beta, kai_minimax_expand_node(&child, depth - 1));
+				if (node->beta <= node->alpha)
+					break;
+			}
+		}
+
+		return node->beta;
+	}
+	
+
+	return -1;
+}
+
+int kai_minimax_node_evaluation(const struct board_state_t* state)
+{
+	
+	int evaluation = 0;
+	const ambo_index_t house = (player_id == 1) ? SOUTH_HOUSE : NORTH_HOUSE;
+	const ambo_index_t opponent_house = (player_id == 1) ? NORTH_HOUSE : SOUTH_HOUSE;
+	const ambo_index_t start_ambo = (state->player == 1) ? SOUTH_START : NORTH_START;
+	const ambo_index_t end_ambo = (state->player == 1) ? SOUTH_END : NORTH_END;
+	ambo_index_t i;
+	ambo_index_t target;
+	
+	// More seeds in our house is better.
+	evaluation += (state->seeds[house] - state->seeds[opponent_house]) * MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT;
+	
+	for (i = start_ambo; i <= end_ambo; ++i)
+	{
+		// More seeds on our side is better.
+		evaluation += state->seeds[i];
+
+		// Having ambos that will land in an empty ambo of ours is good,
+		// especially if the opponent has many seeds in the opposing ambo.
+		target = i + state->seeds[i];
+		while (target >= 14) target -= 14;
+
+		if (state->seeds[target] == 0 && target >= start_ambo && target <= end_ambo)
+		{
+			evaluation += state->seeds[NORTH_END - target] * MINIMAX_EVALUATION_EMPTY_AMBO_WEIGHT;
 		}
 	}
 
-	return -1;
+	return evaluation;
 }
 
 void kai_play_move(struct board_state_t* state, ambo_index_t ambo)
 {
 	ambo_index_t index = ambo;
-	ambo_index_t house = (state->player == 1) ? SOUTH_HOUSE : NORTH_HOUSE;
-	ambo_index_t opponent_house = (state->player == 1) ? NORTH_HOUSE : SOUTH_HOUSE;
-	ambo_index_t start_ambo = (state->player == 1) ? SOUTH_START : NORTH_START;
-	ambo_index_t end_ambo = (state->player == 1) ? SOUTH_END : NORTH_END;
+	const ambo_index_t house = (state->player == 1) ? SOUTH_HOUSE : NORTH_HOUSE;
+	const ambo_index_t opponent_house = (state->player == 1) ? NORTH_HOUSE : SOUTH_HOUSE;
+	const ambo_index_t start_ambo = (state->player == 1) ? SOUTH_START : NORTH_START;
+	const ambo_index_t end_ambo = (state->player == 1) ? SOUTH_END : NORTH_END;
 	ambo_index_t opposite_ambo;
 
 	while (state->seeds[ambo] > 0)
