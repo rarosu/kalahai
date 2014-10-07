@@ -104,6 +104,15 @@ typedef unsigned char kai_ambo_t;
 typedef unsigned char kai_ambo_index_t;
 
 /**
+	Manages one timer instance.
+*/
+struct kai_timer_t
+{
+	LARGE_INTEGER frequency;
+	LARGE_INTEGER start;
+};
+
+/**
 	Handles one connection and its receive buffers.
 */
 struct kai_connection_t
@@ -148,11 +157,13 @@ struct kai_game_state_t
 	// The first ambo for our AI.
 	kai_ambo_index_t player_first_ambo;
 
+	// The house ambo for our AI.
 	kai_ambo_index_t player_house_ambo;
 
 	// The first ambo for our opponent.
 	kai_ambo_index_t opponent_first_ambo;
 
+	// The house ambo for our opponent.
 	kai_ambo_index_t opponent_house_ambo;
 
 	// The state of the board at the last update from the server.
@@ -184,34 +195,6 @@ struct kai_alphabeta_node_t
 };
 
 
-
-
-/**
-	GLOBALS
-*/
-
-/*
-// The socket connected to the server.
-extern SOCKET client_socket;
-
-// The buffer that holds all received data from the server.
-extern char receive_buffer[RECEIVE_BUFFER_SIZE];
-
-// Specifies where in the receive buffer we should start writing the next incoming characters.
-extern char* receive_ptr;
-
-// Our player ID, as given to us by the server.
-extern player_id_t player_id;
-
-// The first ambo that is ours (0 for player 1 (south), 7 for player 2 (north)).
-extern ambo_index_t first_ambo;
-
-// The state of the board as given to us by the server.
-extern struct board_state_t board_state;
-*/
-
-
-
 /**
 	PROTOTYPES
 */
@@ -219,7 +202,7 @@ extern struct board_state_t board_state;
 /**
 	Initialize WinSock. Open the socket and attempt to connect to the given ip and port.
 */
-int kai_open_connection(struct kai_connection_t* connection, const char* ip = KAI_DEFAULT_SERVER_ADDRESS, const char* port = KAI_DEFAULT_PORT);
+int kai_open_connection(struct kai_connection_t* connection, const char* ip, const char* port);
 
 /**
 	Close the socket and cleanup after WinSock.
@@ -297,3 +280,13 @@ kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* stat
 	Given a board state, play a move.
 */
 void kai_play_move(struct kai_board_state_t* state, kai_ambo_index_t ambo);
+
+/**
+	Start measuring time and store that state in the timer structure.
+*/
+void kai_start_timer(struct kai_timer_t* timer);
+
+/**
+	Calculate the time since kai_start_timer was called with the timer parameter.
+*/
+double kai_stop_timer(const struct kai_timer_t* timer);

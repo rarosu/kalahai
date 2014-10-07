@@ -16,19 +16,15 @@ void test_play_move();
 */
 int main(int argc, char* argv[])
 {
-	signed char c = -1;
-	printf("%d", (int) c);
+	test_play_move();
 
-
-	//test_play_move();
-
-	//getchar();
-	//return 0;
+	getchar();
+	return 0;
 }
 
 void test_play_move()
 {
-	struct board_state_t a;
+	struct kai_board_state_t a;
 
 	{
 		// Test a normal move (which doesn't capture or end in the player's house).
