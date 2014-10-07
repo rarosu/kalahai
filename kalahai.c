@@ -348,8 +348,8 @@ int kai_parse_board_state(struct kai_board_state_t* board_state, const char* boa
 int kai_is_game_over(const struct kai_board_state_t* board_state)
 {
 	kai_ambo_index_t ambo;
-	int s;
-	int n;
+	int s = 0;
+	int n = 0;
 
 	for (ambo = KAI_SOUTH_START; ambo <= KAI_SOUTH_END; ambo++)
 	{
