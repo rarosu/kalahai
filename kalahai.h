@@ -8,67 +8,8 @@
 #include <stdlib.h>
 
 
-
 /**
-	STRUCTURES & TYPEDEFS
-*/
-
-typedef signed char player_id_t;
-
-/**
-	The type for an evaluation value.
-*/
-typedef signed short evaluation_t;
-
-/**
-	The type for holding the number of seeds in one ambo.
-*/
-typedef unsigned char ambo_t;
-
-/**
-	The index type for accessing an ambo.
-*/
-typedef unsigned char ambo_index_t;
-
-/**
-	Describes the board state (i.e. how many seeds there are in every ambo).
-*/
-struct board_state_t
-{
-	/**
-	The number of seeds in every ambo (one index for each ambo).
-	Formatted such that:
-		board_state[0] through board_state[5] = The number of seeds in the south ambos.
-		board_state[6] = The number of seeds in the south house.
-		board_state[7] through board_state[12] = The number of seeds in the north ambos.
-		board_state[13] = The number of seeds in the north house.
-	*/
-	ambo_t seeds[14];
-
-	// The player that will make the next move.
-	player_id_t player;
-};
-
-/**
-	The state of a minimax tree node.
-*/
-struct minimax_node_t
-{
-	// The state of the board.
-	struct board_state_t state;
-
-	// The alpha parameter for the alpha-beta pruning.
-	evaluation_t alpha;
-
-	// The beta parameter for the alpha-beta pruning.
-	evaluation_t beta;
-};
-
-
-
-
-/**
-	CONSTANTS
+	DEFINES
 */
 
 // A received command should not exceed this.
@@ -134,6 +75,101 @@ struct minimax_node_t
 #define MINIMAX_MAX_DEPTH 5
 #define MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT 4
 #define MINIMAX_EVALUATION_EMPTY_AMBO_WEIGHT 2
+
+
+
+
+/**
+	STRUCTURES & TYPEDEFS
+*/
+
+typedef signed char player_id_t;
+
+/**
+	The type for an evaluation value.
+*/
+typedef signed short evaluation_t;
+
+/**
+	The type for holding the number of seeds in one ambo.
+*/
+typedef unsigned char ambo_t;
+
+/**
+	The index type for accessing an ambo.
+*/
+typedef unsigned char ambo_index_t;
+
+/**
+	Handles one connection and its receive buffers.
+*/
+struct connection_t
+{
+	// The socket connection to the server.
+	SOCKET socket;
+
+	// The buffer for receiving data from the server.
+	char receive_buffer[RECEIVE_BUFFER_SIZE];
+
+	// The point in the receive buffer where we should put new incoming data.
+	char* receive_ptr;
+};
+
+/**
+	Manages information about the current game being played.
+*/
+struct game_state_t
+{
+	// The player ID our AI was assigned.
+	player_id_t player_id;
+
+	// The first ambo for our AI.
+	ambo_index_t first_ambo;
+};
+
+/**
+	Describes the board state (i.e. how many seeds there are in every ambo).
+*/
+struct board_state_t
+{
+	/**
+	The number of seeds in every ambo (one index for each ambo).
+	Formatted such that:
+		board_state[0] through board_state[5] = The number of seeds in the south ambos.
+		board_state[6] = The number of seeds in the south house.
+		board_state[7] through board_state[12] = The number of seeds in the north ambos.
+		board_state[13] = The number of seeds in the north house.
+	*/
+	ambo_t seeds[14];
+
+	// The player that will make the next move.
+	player_id_t player;
+};
+
+/**
+	The state of a minimax tree node.
+*/
+struct minimax_node_t
+{
+	// The state of the board.
+	struct board_state_t state;
+};
+
+/**
+	The state of a minimax tree node with alpha-beta pruning.
+*/
+struct alphabeta_node_t
+{
+	// The state of the board.
+	struct board_state_t state;
+
+	// The alpha parameter for the alpha-beta pruning.
+	evaluation_t alpha;
+
+	// The beta parameter for the alpha-beta pruning.
+	evaluation_t beta;
+};
+
 
 
 
@@ -219,19 +255,29 @@ int kai_parse_board_state(const char* board_string);
 int kai_random_make_move(void);
 
 /**
-	Make a move using the minimax algorithm.
+	Make a move using the minimax algorithm without any pruning.
 */
 int kai_minimax_make_move(void);
 
 /**
-	Expand the given node.
+	Expand the given node without doing any pruning.
 */
-int kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth);
+evaluation_t kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth);
+
+/**
+	Make a move using the minimax algorithm with alpha-beta pruning.
+*/
+int kai_alphabeta_make_move(void);
+
+/**
+	Expand the given node and prune nodes with the alpha-beta pruning.
+*/
+evaluation_t kai_alphabeta_expand_node(struct alphabeta_node_t* node, unsigned int depth);
 
 /**
 	Calculate the evaluation (heuristic) value for a given board state.
 */
-int kai_minimax_node_evaluation(const struct board_state_t* state);
+evaluation_t kai_minimax_node_evaluation(const struct board_state_t* state);
 
 /**
 	Given a board state, play a move.

@@ -1,4 +1,5 @@
 #include "kalahai.h"
+#include <stdio.h>
 
 #define assert_eq(actual, expected) if ((actual) == (expected)) report_success(); else report_failure();
 #define report_success() printf("[SUCCESS] Test %s:%d success.\n", __FUNCTION__, __LINE__)
@@ -15,10 +16,14 @@ void test_play_move();
 */
 int main(int argc, char* argv[])
 {
-	test_play_move();
+	signed char c = -1;
+	printf("%d", (int) c);
 
-	getchar();
-	return 0;
+
+	//test_play_move();
+
+	//getchar();
+	//return 0;
 }
 
 void test_play_move()

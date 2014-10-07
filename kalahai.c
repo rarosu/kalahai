@@ -93,7 +93,10 @@ int kai_shutdown_socket(void)
 int kai_run(void)
 {
 	// The winner of the game (0 if no one has won yet).
-	player_id_t winner = PLAYER_NONE;
+	int winner = PLAYER_NONE;
+
+	// The next player (same as player_id, though int). Used for sscanf, since MSVC doesn't support scanning unsigned char.
+	int next_player = PLAYER_NONE;
 
 	// The move our AI elected to make.
 	int move = -1;
@@ -105,12 +108,12 @@ int kai_run(void)
 	sprintf(command_buffer, "%s\n", COMMAND_HELLO);
 	if (kai_send_command(command_buffer) != 0) return 1;
 	if (kai_receive_command(command_buffer) != 0) return 1;
-	sscanf(command_buffer, "%*s %d", &player_id);
+	sscanf(command_buffer, "%*s %hhd", &player_id);
 	if (player_id == 1)
 		first_ambo = 0;
 	else
 		first_ambo = 7;
-	fprintf(stdout, "Player ID: %d. First Ambo: %d\n", player_id, first_ambo);
+	fprintf(stdout, "Player ID: %d. First Ambo: %hhu\n", (int) player_id, first_ambo);
 
 	while (1)
 	{
@@ -120,11 +123,11 @@ int kai_run(void)
 		if (kai_receive_command(command_buffer) != 0) return 1;
 		if (strcmp(command_buffer, ERROR_GAME_NOT_FULL) != 0)
 		{
-			sscanf(command_buffer, "%d", &winner);
+			sscanf(command_buffer, "%hhd", &winner);
 			if (winner != -1)
 			{
 				// Print the winner and break out from the game loop.
-				fprintf(stdout, "Winner: %d. ", winner);
+				fprintf(stdout, "Winner: %hhd. ", winner);
 				
 				if (winner == 0)
 					fprintf(stdout, "Even game.\n");
@@ -143,7 +146,7 @@ int kai_run(void)
 		if (kai_receive_command(command_buffer) != 0) return 1;
 		if (strcmp(command_buffer, ERROR_GAME_NOT_FULL) != 0)
 		{
-			sscanf(command_buffer, "%d", &board_state.player);
+			sscanf(command_buffer, "%hhd", &board_state.player);
 			if (board_state.player == player_id)
 			{
 				// Update the board data.
@@ -156,9 +159,9 @@ int kai_run(void)
 				// Make our move here!
 				move = kai_random_make_move();
 				if (move == -1) return 1;
-				fprintf(stdout, "Making move: %d (Seeds in ambo %d)\n", move, board_state.seeds[move - 1 + first_ambo]);
+				fprintf(stdout, "Making move: %d (Seeds in ambo %hhu)\n", move, board_state.seeds[move - 1 + first_ambo]);
 
-				sprintf(command_buffer, "%s %d %d\n", COMMAND_MOVE, move, player_id);
+				sprintf(command_buffer, "%s %d %hhd\n", COMMAND_MOVE, move, player_id);
 				if (kai_send_command(command_buffer) != 0) return 1;
 				if (kai_receive_command(command_buffer) != 0) return 1;
 
@@ -337,16 +340,96 @@ int kai_random_make_move(void)
 int kai_minimax_make_move(void)
 {
 	struct minimax_node_t root;
+	struct minimax_node_t child;
+	ambo_index_t ambo;
+	ambo_index_t best_ambo;
+	evaluation_t best = SHRT_MIN;
+	evaluation_t value;
+
+	memcpy(&root.state, &board_state, sizeof(board_state));
+	
+	// Expand every child to the root state and decide which one is the best.
+	for (ambo = first_ambo; ambo != first_ambo + 6; ++ambo)
+	{
+		memcpy(&child.state, &root.state, sizeof(root.state));
+		kai_play_move(&child.state, ambo);
+
+		value = kai_minimax_expand_node(&child, MINIMAX_MAX_DEPTH);
+		if (value > best)
+		{
+			best = value;
+			best_ambo = ambo;
+		}
+	}
+
+	return best_ambo - first_ambo + 1;
+}
+
+evaluation_t kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth)
+{
+	evaluation_t best;
+	ambo_index_t start;
+	ambo_index_t ambo;
+	struct minimax_node_t child;
+	
+	if (depth == 0)
+		return kai_minimax_node_evaluation(&node->state);
+
+	start = (node->state.player == 1) ? SOUTH_START : NORTH_START;
+
+	if (node->state.player == player_id)
+	{
+		// It is our turn. Maximize.
+		best = SHRT_MIN;
+		
+		for (ambo = start; ambo != start + 6; ambo++)
+		{
+			if (node->state.seeds[ambo] != 0)
+			{
+				// Evaluate the possible move.
+				memcpy(&child.state, &node->state, sizeof(node->state));
+				
+				kai_play_move(&child.state, ambo);
+
+				best = max(best, kai_minimax_expand_node(&child, depth - 1));
+			}
+		}
+	}
+	else
+	{
+		// It is the opponents turn. Minimize.
+		best = SHRT_MAX;
+
+		for (ambo = start; ambo != start + 6; ambo++)
+		{
+			if (node->state.seeds[ambo] != 0)
+			{
+				// Evaluate the possible move.
+				memcpy(&child.state, &node->state, sizeof(node->state));
+				
+				kai_play_move(&child.state, ambo);
+
+				best = min(best, kai_minimax_expand_node(&child, depth - 1));
+			}
+		}
+	}
+
+	return best;
+}
+
+int kai_alphabeta_make_move(void)
+{
+	struct alphabeta_node_t root;
 	memcpy(&root.state, &board_state, sizeof(board_state));
 	root.alpha = -SHRT_MIN;
 	root.beta = SHRT_MAX;
 
-	kai_minimax_expand_node(&root, MINIMAX_MAX_DEPTH);
+	kai_alphabeta_expand_node(&root, MINIMAX_MAX_DEPTH);
 
 	return -1;
 }
 
-int kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth)
+evaluation_t kai_alphabeta_expand_node(struct alphabeta_node_t* node, unsigned int depth)
 {
 	ambo_index_t start;
 	ambo_index_t ambo;
@@ -363,12 +446,12 @@ int kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth)
 		{
 			if (node->state.seeds[ambo] != 0)
 			{
-				struct minimax_node_t child;
+				struct alphabeta_node_t child;
 				memcpy(&child, node, sizeof(child));
 
 				kai_play_move(&child.state, ambo);
 
-				node->alpha = max(node->alpha, kai_minimax_expand_node(&child, depth - 1));
+				node->alpha = max(node->alpha, kai_alphabeta_expand_node(&child, depth - 1));
 				if (node->beta <= node->alpha)
 					break;
 			}
@@ -383,12 +466,12 @@ int kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth)
 		{
 			if (node->state.seeds[ambo] != 0)
 			{
-				struct minimax_node_t child;
+				struct alphabeta_node_t child;
 				memcpy(&child, node, sizeof(child));
 
 				kai_play_move(&child.state, ambo);
 
-				node->beta = min(node->beta, kai_minimax_expand_node(&child, depth - 1));
+				node->beta = min(node->beta, kai_alphabeta_expand_node(&child, depth - 1));
 				if (node->beta <= node->alpha)
 					break;
 			}
@@ -401,10 +484,10 @@ int kai_minimax_expand_node(struct minimax_node_t* node, unsigned int depth)
 	return -1;
 }
 
-int kai_minimax_node_evaluation(const struct board_state_t* state)
+evaluation_t kai_minimax_node_evaluation(const struct board_state_t* state)
 {
 	
-	int evaluation = 0;
+	evaluation_t evaluation = 0;
 	const ambo_index_t house = (player_id == 1) ? SOUTH_HOUSE : NORTH_HOUSE;
 	const ambo_index_t opponent_house = (player_id == 1) ? NORTH_HOUSE : SOUTH_HOUSE;
 	const ambo_index_t start_ambo = (state->player == 1) ? SOUTH_START : NORTH_START;
