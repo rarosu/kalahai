@@ -556,7 +556,7 @@ kai_evaluation_t kai_alphabeta_expand_node(struct kai_game_state_t* state, struc
 kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* state, const struct kai_board_state_t* board_state)
 {
 	kai_evaluation_t evaluation = 0;
-	kai_ambo_index_t i;
+	kai_ambo_index_t ambo;
 	kai_ambo_index_t target;
 
 	// A terminal state should always yield the highest or lowest evaluation scores.
@@ -569,21 +569,27 @@ kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* stat
 	// More seeds in our house is better.
 	evaluation += (board_state->seeds[state->player_house_ambo] - board_state->seeds[state->opponent_house_ambo]) * KAI_MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT;
 	
-	for (i = state->player_first_ambo; i <= state->player_first_ambo + 6; ++i)
+	for (ambo = state->player_first_ambo; ambo <= state->player_first_ambo + 6; ++ambo)
 	{
 		// More seeds on our side is better.
-		evaluation += board_state->seeds[i];
+		evaluation += board_state->seeds[ambo];
 
 		// Having ambos that will land in an empty ambo of ours is good,
 		// especially if the opponent has many seeds in the opposing ambo.
-		target = i + board_state->seeds[i];
+		target = ambo + board_state->seeds[ambo];
 		while (target >= 14) target -= 14;
 
 		if (board_state->seeds[target] == 0 && target >= state->player_first_ambo && target <= state->player_first_ambo + 6)
 		{
 			evaluation += board_state->seeds[KAI_NORTH_END - target] * KAI_MINIMAX_EVALUATION_EMPTY_AMBO_WEIGHT;
 		}
+
+		// Having ambos that will land in our house is good.
+		if (target == state->player_house_ambo)
+			evaluation += board_state->seeds[ambo] * KAI_MINIMAX_EVALUATION_EXTRA_TURN_WEIGHT;
 	}
+
+	// TODO: Do opposing checks for the opponent (a good state for our opponent is bad for us).
 
 	return evaluation;
 }
