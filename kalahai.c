@@ -166,7 +166,11 @@ int kai_run(struct kai_connection_t* connection)
 				if (kai_receive_command(connection, command_buffer) != 0) return 1;
 				kai_parse_board_state(&state.board_state, command_buffer);
 				fprintf(stdout, "Board State: %s\n", command_buffer);
-			
+				
+				// Do not make a move if the game is over in this state.
+				if (kai_is_game_over(&state.board_state))
+					continue;
+
 				// Make our move here!
 				move = kai_minimax_make_move(&state);
 				if (move == -1) 
@@ -341,6 +345,33 @@ int kai_parse_board_state(struct kai_board_state_t* board_state, const char* boa
 	return 0;
 }
 
+int kai_is_game_over(const struct kai_board_state_t* board_state)
+{
+	kai_ambo_index_t ambo;
+	int s;
+	int n;
+
+	for (ambo = KAI_SOUTH_START; ambo <= KAI_SOUTH_END; ambo++)
+	{
+		if (board_state->seeds[ambo] > 0)
+		{
+			s = 1;
+			break;
+		}
+	}
+
+	for (ambo = KAI_NORTH_START; ambo <= KAI_NORTH_END; ambo++)
+	{
+		if (board_state->seeds[ambo] > 0)
+		{
+			n = 1;
+			break;
+		}
+	}
+
+	return !(s && n);
+}
+
 int kai_random_make_move(struct kai_game_state_t* state)
 {
 	kai_ambo_index_t i;
@@ -355,26 +386,33 @@ int kai_random_make_move(struct kai_game_state_t* state)
 
 int kai_minimax_make_move(struct kai_game_state_t* state)
 {
-	int i;
 	int move = -1;
 	struct kai_minimax_node_t root;
-	struct kai_minimax_node_t child;
-	kai_ambo_index_t ambo;
-	kai_evaluation_t best = KAI_EVALUATION_MIN;
-	kai_evaluation_t value;
 	
 	memcpy(&root.state, &state->board_state, sizeof(state->board_state));
-	
+	move = kai_minimax_search_to_depth(state, &root, KAI_MINIMAX_MAX_DEPTH);
+
+	return move;
+}
+
+int kai_minimax_search_to_depth(struct kai_game_state_t* state, struct kai_minimax_node_t* root, unsigned int depth)
+{
+	int move = -1;
+	struct kai_minimax_node_t child;
+	kai_evaluation_t best = KAI_EVALUATION_MIN;
+	kai_evaluation_t value;
+	kai_ambo_index_t ambo;
+
 	// Expand every child to the root state and decide which one is the best.
 	for (ambo = state->player_first_ambo; ambo != state->player_first_ambo + 6; ++ambo)
 	{
-		if (root.state.seeds[ambo] != 0)
+		if (root->state.seeds[ambo] != 0)
 		{
-			memcpy(&child.state, &root.state, sizeof(root.state));
+			memcpy(&child.state, &root->state, sizeof(root->state));
 			kai_play_move(&child.state, ambo);
 
-			value = kai_minimax_expand_node(state, &child, KAI_MINIMAX_MAX_DEPTH);
-			if (value > best)
+			value = kai_minimax_expand_node(state, &child, depth - 1);
+			if (value >= best)
 			{
 				best = value;
 				move = ambo - state->player_first_ambo + 1;

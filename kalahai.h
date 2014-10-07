@@ -245,6 +245,11 @@ int kai_parse_int(const char* number_string, int char_count);
 int kai_parse_board_state(struct kai_board_state_t* board_state, const char* board_string);
 
 /**
+	Returns 1 if one player has no more seeds in their ambos. 0 otherwise.
+*/
+int kai_is_game_over(const struct kai_board_state_t* board_state);
+
+/**
 	Makes a random move from a valid ambo. This is for testing only (since it is a bad strategy).
 
 	Returns the ambo to make a move from (indexed 1 to 6). Returns -1 on error.
@@ -255,6 +260,11 @@ int kai_random_make_move(struct kai_game_state_t* state);
 	Make a move using the minimax algorithm without any pruning.
 */
 int kai_minimax_make_move(struct kai_game_state_t* state);
+
+/**
+	Returns the best evaluated move by searching the game tree to a specified depth.
+*/
+int kai_minimax_search_to_depth(struct kai_game_state_t* state, struct kai_minimax_node_t* root, unsigned int depth);
 
 /**
 	Expand the given node without doing any pruning.
