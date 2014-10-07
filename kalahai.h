@@ -284,9 +284,9 @@ void kai_play_move(struct kai_board_state_t* state, kai_ambo_index_t ambo);
 /**
 	Start measuring time and store that state in the timer structure.
 */
-void kai_start_timer(struct kai_timer_t* timer);
+void kai_timer_start(struct kai_timer_t* timer);
 
 /**
 	Calculate the time since kai_start_timer was called with the timer parameter.
 */
-double kai_stop_timer(const struct kai_timer_t* timer);
+double kai_timer_get_time(const struct kai_timer_t* timer);

@@ -355,7 +355,8 @@ int kai_random_make_move(struct kai_game_state_t* state)
 
 int kai_minimax_make_move(struct kai_game_state_t* state)
 {
-	int result = -1;
+	int i;
+	int move = -1;
 	struct kai_minimax_node_t root;
 	struct kai_minimax_node_t child;
 	kai_ambo_index_t ambo;
@@ -376,12 +377,12 @@ int kai_minimax_make_move(struct kai_game_state_t* state)
 			if (value > best)
 			{
 				best = value;
-				result = ambo - state->player_first_ambo + 1;
+				move = ambo - state->player_first_ambo + 1;
 			}
 		}
 	}
 
-	return result;
+	return move;
 }
 
 kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, struct kai_minimax_node_t* node, unsigned int depth)
@@ -391,7 +392,14 @@ kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, struct 
 	struct kai_minimax_node_t child;
 	int terminal = 1;
 	
+	// Check if we have reached the maximum depth.
 	if (depth == 0)
+		return kai_minimax_node_evaluation(state, &node->state);
+
+	// Stop expanding if we have reached a terminal state where either we or our opponent has more than half the seeds secured.
+	if (node->state.seeds[state->player_house_ambo] >= 37)
+		return kai_minimax_node_evaluation(state, &node->state);
+	if (node->state.seeds[state->opponent_house_ambo] >= 37)
 		return kai_minimax_node_evaluation(state, &node->state);
 
 	if (node->state.player == state->player_id)
@@ -509,11 +517,17 @@ kai_evaluation_t kai_alphabeta_expand_node(struct kai_game_state_t* state, struc
 
 kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* state, const struct kai_board_state_t* board_state)
 {
-	
 	kai_evaluation_t evaluation = 0;
 	kai_ambo_index_t i;
 	kai_ambo_index_t target;
-	
+
+	// A terminal state should always yield the highest or lowest evaluation scores.
+	// Having more than half the seeds secured in a house is a terminal state.
+	if (board_state->seeds[state->player_house_ambo] >= 37)
+		return KAI_EVALUATION_MAX;
+	if (board_state->seeds[state->opponent_house_ambo] >= 37)
+		return KAI_EVALUATION_MIN;
+
 	// More seeds in our house is better.
 	evaluation += (board_state->seeds[state->player_house_ambo] - board_state->seeds[state->opponent_house_ambo]) * KAI_MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT;
 	
@@ -570,16 +584,16 @@ void kai_play_move(struct kai_board_state_t* state, kai_ambo_index_t ambo)
 	}
 }
 
-void kai_start_timer(struct kai_timer_t* timer)
+void kai_timer_start(struct kai_timer_t* timer)
 {
 	QueryPerformanceFrequency(&timer->frequency);
 	QueryPerformanceCounter(&timer->start);
 }
 
-double kai_stop_timer(const struct kai_timer_t* timer)
+double kai_timer_get_time(const struct kai_timer_t* timer)
 {
-	LARGE_INTEGER stop;
-	QueryPerformanceCounter(&stop);
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
 
-	return (timer->start.QuadPart - stop.QuadPart) / (double) timer->frequency.QuadPart; 
+	return (timer->start.QuadPart - now.QuadPart) / (double) timer->frequency.QuadPart; 
 }
