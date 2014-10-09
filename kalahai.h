@@ -72,10 +72,10 @@
 #define KAI_DEFAULT_SERVER_ADDRESS "127.0.0.1"
 
 // Define minimax constants
-#define KAI_MINIMAX_MAX_DEPTH 5
+#define KAI_MINIMAX_START_DEPTH 5
 #define KAI_MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT 4
 #define KAI_MINIMAX_EVALUATION_EMPTY_AMBO_WEIGHT 2
-#define KAI_MINIMAX_EVALUATION_EXTRA_TURN_WEIGHT 2
+#define KAI_MINIMAX_EVALUATION_EXTRA_TURN_TERM 50
 
 #define KAI_EVALUATION_MIN SHRT_MIN
 #define KAI_EVALUATION_MAX SHRT_MAX
@@ -158,11 +158,17 @@ struct kai_game_state_t
 	// The first ambo for our AI.
 	kai_ambo_index_t player_first_ambo;
 
+	// The final ambo for our AI (last not-house).
+	kai_ambo_index_t player_end_ambo;
+
 	// The house ambo for our AI.
 	kai_ambo_index_t player_house_ambo;
 
 	// The first ambo for our opponent.
 	kai_ambo_index_t opponent_first_ambo;
+
+	// The final ambo for our opponent (last not-house).
+	kai_ambo_index_t opponent_end_ambo;
 
 	// The house ambo for our opponent.
 	kai_ambo_index_t opponent_house_ambo;
@@ -265,27 +271,17 @@ int kai_minimax_make_move(struct kai_game_state_t* state);
 /**
 	Returns the best evaluated move by searching the game tree to a specified depth.
 */
-int kai_minimax_search_to_depth(struct kai_game_state_t* state, struct kai_minimax_node_t* root, unsigned int depth);
+int kai_minimax_search_to_depth(struct kai_game_state_t* state, const struct kai_minimax_node_t* root, unsigned int depth);
 
 /**
 	Expand the given node without doing any pruning.
 */
-kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, struct kai_minimax_node_t* node, unsigned int depth);
-
-/**
-	Make a move using the minimax algorithm with alpha-beta pruning.
-*/
-int kai_alphabeta_make_move(struct kai_game_state_t* state);
-
-/**
-	Expand the given node and prune nodes with the alpha-beta pruning.
-*/
-kai_evaluation_t kai_alphabeta_expand_node(struct kai_game_state_t* state, struct kai_alphabeta_node_t* node, unsigned int depth);
+kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, const struct kai_minimax_node_t* node, const struct kai_board_state_t* previous_board_state, unsigned int depth);
 
 /**
 	Calculate the evaluation (heuristic) value for a given board state (from the perspective of the player).
 */
-kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* state, const struct kai_board_state_t* board_state);
+kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* state, const struct kai_board_state_t* board_state, const struct kai_board_state_t* previous_board_state);
 
 /**
 	Given a board state, play a move.

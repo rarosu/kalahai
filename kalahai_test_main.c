@@ -10,13 +10,19 @@
 */
 void test_play_move();
 
+/**
+	Test the evaluation function and the minimax algorithm.
+*/
+void test_minimax();
+
 
 /**
 	Program entry point
 */
 int main(int argc, char* argv[])
 {
-	test_play_move();
+	//test_play_move();
+	test_minimax();
 
 	getchar();
 	return 0;
@@ -136,4 +142,23 @@ void test_play_move()
 		assert_eq(a.seeds[13], 1);
 	}
 	
+}
+
+void test_minimax()
+{
+	// Setup a game state.
+	int move;
+	struct kai_game_state_t game_state;
+	const char* board_string = "0;6;6;6;6;6;6;0;6;6;6;6;6;6;1";
+
+	game_state.player_id = 1;
+	game_state.player_first_ambo = 0;
+	game_state.player_house_ambo = 6;
+	game_state.opponent_first_ambo = 7;
+	game_state.opponent_house_ambo = 13;
+	kai_parse_board_state(&game_state.board_state, board_string);
+	
+	// The first move should be the ambo that will land in our house and score us an extra move.
+	move = kai_minimax_make_move(&game_state);
+	assert_eq(move, 1);
 }
