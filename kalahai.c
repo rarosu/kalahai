@@ -597,11 +597,38 @@ kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* stat
 void kai_play_move(struct kai_board_state_t* state, kai_ambo_index_t ambo)
 {
 	kai_ambo_index_t index = ambo;
-	const kai_ambo_index_t house = (state->player == 1) ? KAI_SOUTH_HOUSE : KAI_NORTH_HOUSE;
-	const kai_ambo_index_t opponent_house = (state->player == 1) ? KAI_NORTH_HOUSE : KAI_SOUTH_HOUSE;
-	const kai_ambo_index_t start_ambo = (state->player == 1) ? KAI_SOUTH_START : KAI_NORTH_START;
-	const kai_ambo_index_t end_ambo = (state->player == 1) ? KAI_SOUTH_END : KAI_NORTH_END;
+	kai_ambo_index_t start_ambo;
+	kai_ambo_index_t end_ambo;
+	kai_ambo_index_t house;
+	kai_ambo_index_t opponent_start_ambo;
+	kai_ambo_index_t opponent_end_ambo;
+	kai_ambo_index_t opponent_house;
 	kai_ambo_index_t opposite_ambo;
+	kai_player_id_t opponent_id;
+	int player_ambo_empty;
+	
+
+	if (state->player == 1)
+	{
+		start_ambo = KAI_SOUTH_START;
+		end_ambo = KAI_SOUTH_END;
+		house = KAI_SOUTH_HOUSE;
+		opponent_start_ambo = KAI_NORTH_START;
+		opponent_end_ambo = KAI_NORTH_END;
+		opponent_house = KAI_NORTH_HOUSE;
+		opponent_id = 2;
+	}
+	else
+	{
+		start_ambo = KAI_NORTH_START;
+		end_ambo = KAI_NORTH_END;
+		house = KAI_NORTH_HOUSE;
+		opponent_start_ambo = KAI_SOUTH_START;
+		opponent_end_ambo = KAI_SOUTH_END;
+		opponent_house = KAI_SOUTH_HOUSE;
+		opponent_id = 1;
+	}
+
 
 	while (state->seeds[ambo] > 0)
 	{
@@ -617,14 +644,56 @@ void kai_play_move(struct kai_board_state_t* state, kai_ambo_index_t ambo)
 	}
 
 	// Check if we get an extra move (by landing the last seed in our own house).
-	if (index != house) state->player = (state->player == 1) ? 2 : 1;
+	if (index != house) state->player = opponent_id;
 	
 	// Check if we get a capture of enemy seeds (by landing the last seed in an empty ambo of our own).
-	if (index >= start_ambo && index <= end_ambo)
+	// When capturing seeds, we take the opponent's seeds from the opposite ambo and put them into our house.
+	if (index >= start_ambo && index <= end_ambo && state->seeds[index] == 1)
 	{
 		opposite_ambo = KAI_NORTH_END - index;
-		state->seeds[index] += state->seeds[opposite_ambo];
+		state->seeds[house] += state->seeds[opposite_ambo] + 1;
 		state->seeds[opposite_ambo] = 0;
+		state->seeds[index] = 0;
+	}
+
+	// Check if the south is out of seeds.
+	player_ambo_empty = 1;
+	for (index = KAI_SOUTH_START; index <= KAI_SOUTH_END; ++index)
+	{
+		if (state->seeds[index] != 0)
+		{
+			player_ambo_empty = 0;
+			break;
+		}
+	}
+
+	if (player_ambo_empty)
+	{
+		for (index = KAI_NORTH_START; index <= KAI_NORTH_END; ++index)
+		{
+			state->seeds[KAI_NORTH_HOUSE] += state->seeds[index];
+			state->seeds[index] = 0;
+		}
+	}
+
+	// Check if the north is out of seeds.
+	player_ambo_empty = 1;
+	for (index = KAI_NORTH_START; index <= KAI_NORTH_END; ++index)
+	{
+		if (state->seeds[index] != 0)
+		{
+			player_ambo_empty = 0;
+			break;
+		}
+	}
+
+	if (player_ambo_empty)
+	{
+		for (index = KAI_SOUTH_START; index <= KAI_SOUTH_END; ++index)
+		{
+			state->seeds[KAI_SOUTH_HOUSE] += state->seeds[index];
+			state->seeds[index] = 0;
+		}
 	}
 }
 

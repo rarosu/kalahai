@@ -105,8 +105,35 @@ void test_play_move()
 
 		kai_play_move(&a, 0);
 		assert_eq(a.seeds[0], 0);
-		assert_eq(a.seeds[1], 19);
+		assert_eq(a.seeds[1], 0);
+		assert_eq(a.seeds[6], 19);
 		assert_eq(a.seeds[11], 0);
+	}
+
+	{
+		// Test a move that will end in one player having no more seeds.
+		// The result should be that all the seeds the opponent has left is moved to their house.
+		a.seeds[0] = 15;
+		a.seeds[1] = 0;
+		a.seeds[2] = 0;
+		a.seeds[3] = 0;
+		a.seeds[4] = 0;
+		a.seeds[5] = 0;
+		a.seeds[6] = 0;
+		a.seeds[7] = 0;
+		a.seeds[8] = 0;
+		a.seeds[9] = 0;
+		a.seeds[10] = 0;
+		a.seeds[11] = 0;
+		a.seeds[12] = 1;
+		a.seeds[13] = 0;
+		a.player = 2;
+
+		kai_play_move(&a, 12);
+		assert_eq(a.seeds[0], 0);
+		assert_eq(a.seeds[12], 0);
+		assert_eq(a.seeds[6], 15);
+		assert_eq(a.seeds[13], 1);
 	}
 	
 }
