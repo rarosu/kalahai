@@ -394,14 +394,37 @@ int kai_random_make_move(struct kai_game_state_t* state)
 
 int kai_minimax_make_move(struct kai_game_state_t* state)
 {
-	int move = -1;
+	struct kai_timer_t timer;
 	struct kai_minimax_node_t root;
-	
 	memcpy(&root.state, &state->board_state, sizeof(state->board_state));
-	move = kai_minimax_search_to_depth(state, &root, KAI_MINIMAX_START_DEPTH);
+	root.node_count = 0;
 	
+	kai_timer_start(&timer);
+	kai_minimax_expand_node(state, &root, NULL, KAI_MINIMAX_START_DEPTH, &timer);
+	fprintf(stdout, "Searched %d nodes in %f seconds.\n", root.node_count, root.time);
 
-	return move;
+	// Check if we ran out of time.
+	if (root.time > KAI_MINIMAX_TIME_LIMIT)
+	{
+		return -1;
+	}
+
+	// Check if we did not find a move.
+	if (root.selected_move == -1)
+	{
+		kai_ambo_index_t ambo;
+
+		// If we did not find a move, this is due to all moves being equal. Just select the first ambo, if any.
+		for (ambo = state->player_first_ambo; ambo <= state->player_end_ambo; ++ambo)
+		{
+			if (state->board_state.seeds[ambo] != 0)
+				return ambo;
+		}
+
+		return -1;
+	}
+
+	return root.selected_move;
 }
 
 int kai_minimax_search_to_depth(struct kai_game_state_t* state, const struct kai_minimax_node_t* root, unsigned int depth)
@@ -411,7 +434,9 @@ int kai_minimax_search_to_depth(struct kai_game_state_t* state, const struct kai
 	kai_evaluation_t best = KAI_EVALUATION_MIN;
 	kai_evaluation_t value;
 	kai_ambo_index_t ambo;
+	int node_count = 0;
 
+	/*
 	// Expand every child of the root state and decide which one is the best.
 	for (ambo = state->player_first_ambo; ambo != state->player_first_ambo + 6; ++ambo)
 	{
@@ -419,45 +444,60 @@ int kai_minimax_search_to_depth(struct kai_game_state_t* state, const struct kai
 		{
 			memcpy(&child.state, &root->state, sizeof(root->state));
 			kai_play_move(&child.state, ambo);
+			child.node_count = 0;
 
 			value = kai_minimax_expand_node(state, &child, &root->state, depth - 1);
+
+			node_count += child.node_count;
+
 			if (value >= best)
 			{
 				best = value;
 				move = ambo - state->player_first_ambo + 1;
 
-				//if (best == KAI_EVALUATION_MAX)
-				//	break;
+				if (best == KAI_EVALUATION_MAX)
+					break;
 			}
 		}
 	}
+	*/
+
+	//fprintf(stdout, "Evaluated %d nodes\n", node_count);
 
 	return move;
 }
 
-kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, const struct kai_minimax_node_t* node, const struct kai_board_state_t* previous_board_state, unsigned int depth)
+kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, struct kai_minimax_node_t* node, const struct kai_board_state_t* previous_board_state, unsigned int depth, const struct kai_timer_t* timer)
 {
 	kai_evaluation_t best;
+	kai_evaluation_t value;
 	kai_ambo_index_t ambo;
 	struct kai_minimax_node_t child;
 	int terminal = 1;
-	
+
+	node->selected_move = -1;
+	++node->node_count;
+
+	// Check time, and early exit if we are out of time.
+	node->time = kai_timer_get_time(timer);
+	if (node->time > KAI_MINIMAX_TIME_LIMIT)
+		return kai_minimax_node_evaluation(state, &node->state, previous_board_state);
+
 	// Check if we have reached the maximum depth.
 	if (depth == 0)
 		return kai_minimax_node_evaluation(state, &node->state, previous_board_state);
 
 	// Stop expanding if we have reached a terminal state where either we or our opponent has more than half the seeds secured.
-	if (node->state.seeds[state->player_house_ambo] >= 37)
-		return kai_minimax_node_evaluation(state, &node->state, previous_board_state);
-	if (node->state.seeds[state->opponent_house_ambo] >= 37)
+	if (node->state.seeds[state->player_house_ambo] >= 37 || node->state.seeds[state->opponent_house_ambo] >= 37)
 		return kai_minimax_node_evaluation(state, &node->state, previous_board_state);
 
+	// Search through the child nodes, if any.
 	if (node->state.player == state->player_id)
 	{
 		// It is our turn. Maximize.
 		best = KAI_EVALUATION_MIN;
 		
-		for (ambo = state->player_first_ambo; ambo != state->player_first_ambo + 6; ambo++)
+		for (ambo = state->player_first_ambo; ambo <= state->player_end_ambo; ambo++)
 		{
 			if (node->state.seeds[ambo] != 0)
 			{
@@ -466,10 +506,27 @@ kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, const s
 
 				// Evaluate the possible move.
 				memcpy(&child.state, &node->state, sizeof(node->state));
+				child.node_count = 0;
+				child.selected_move = -1;
 				
 				kai_play_move(&child.state, ambo);
+				value = kai_minimax_expand_node(state, &child, &node->state, depth - 1, timer);
+				
+				// Sum the nodes counted from this subtree.
+				node->node_count += child.node_count;
 
-				best = max(best, kai_minimax_expand_node(state, &child, &node->state, depth - 1));
+				// Update the time the traversing has taken.
+				node->time = child.time;
+
+				if (value > best)
+				{
+					best = value;
+					node->selected_move = ambo - state->player_first_ambo + 1;
+
+					// Do not check any more children if we found a way to win from this node (basic pruning).
+					if (best == KAI_EVALUATION_MAX)
+						return KAI_EVALUATION_MAX;
+				}
 			}
 		}
 	}
@@ -478,7 +535,7 @@ kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, const s
 		// It is the opponents turn. Minimize.
 		best = KAI_EVALUATION_MAX;
 
-		for (ambo = state->opponent_first_ambo; ambo != state->opponent_first_ambo + 6; ambo++)
+		for (ambo = state->opponent_first_ambo; ambo <= state->opponent_end_ambo; ambo++)
 		{
 			if (node->state.seeds[ambo] != 0)
 			{
@@ -487,10 +544,27 @@ kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, const s
 
 				// Evaluate the possible move.
 				memcpy(&child.state, &node->state, sizeof(node->state));
+				child.node_count = 0;
+				child.selected_move = -1;
 				
 				kai_play_move(&child.state, ambo);
+				value = kai_minimax_expand_node(state, &child, &node->state, depth - 1, timer);
 
-				best = min(best, kai_minimax_expand_node(state, &child, &node->state, depth - 1));
+				// Sum the node count from this subtree.
+				node->node_count += child.node_count;
+
+				// Update the time the traversing has taken.
+				node->time = child.time;
+
+				if (value < best)
+				{
+					best = value;
+					node->selected_move = ambo - state->opponent_first_ambo + 1;
+
+					// Do not check any more children if our opponent found a way to win from this node (basic pruning).
+					if (best == KAI_EVALUATION_MIN)
+						return KAI_EVALUATION_MIN;
+				}
 			}
 		}
 	}
@@ -518,7 +592,7 @@ kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* stat
 	evaluation += (board_state->seeds[state->player_house_ambo] - board_state->seeds[state->opponent_house_ambo]) * KAI_MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT;
 	
 	// Having an extra turn is great.
-	if (board_state->player == state->player_id && previous_board_state->player == state->player_id)
+	if (previous_board_state != NULL && board_state->player == state->player_id && previous_board_state->player == state->player_id)
 	{
 		evaluation += KAI_MINIMAX_EVALUATION_EXTRA_TURN_TERM;
 	}
@@ -664,5 +738,5 @@ double kai_timer_get_time(const struct kai_timer_t* timer)
 	LARGE_INTEGER now;
 	QueryPerformanceCounter(&now);
 
-	return (timer->start.QuadPart - now.QuadPart) / (double) timer->frequency.QuadPart; 
+	return (now.QuadPart - timer->start.QuadPart) / (double)timer->frequency.QuadPart;
 }

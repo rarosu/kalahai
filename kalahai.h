@@ -72,7 +72,8 @@
 #define KAI_DEFAULT_SERVER_ADDRESS "127.0.0.1"
 
 // Define minimax constants
-#define KAI_MINIMAX_START_DEPTH 5
+#define KAI_MINIMAX_TIME_LIMIT 4.5
+#define KAI_MINIMAX_START_DEPTH 9
 #define KAI_MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT 4
 #define KAI_MINIMAX_EVALUATION_EMPTY_AMBO_WEIGHT 2
 #define KAI_MINIMAX_EVALUATION_EXTRA_TURN_TERM 50
@@ -184,21 +185,20 @@ struct kai_minimax_node_t
 {
 	// The state of the board.
 	struct kai_board_state_t state;
-};
 
-/**
-	The state of a minimax tree node with alpha-beta pruning.
-*/
-struct kai_alphabeta_node_t
-{
-	// The state of the board.
-	struct kai_board_state_t state;
+	// The number of nodes that has been counted in the tree below this node.
+	int node_count;
 
-	// The alpha parameter for the alpha-beta pruning.
-	kai_evaluation_t alpha;
+	// The move that was selected for the player playing this move (1 - 6). 
+	// This will be -1 if:
+	// * the node has no children moves, or
+	// * either we or our opponent has more than half the seeds, so a move at this point does not matter, or
+	// * if the children of this node has not been evaluated (due to reaching maximum depth), or 
+	// * if every child will lead to the other player winning so it does not matter which move we make.
+	int selected_move;
 
-	// The beta parameter for the alpha-beta pruning.
-	kai_evaluation_t beta;
+	// The time it has taken so far to evaluate this node. Used to check against the time limit.
+	double time;
 };
 
 
@@ -275,8 +275,11 @@ int kai_minimax_search_to_depth(struct kai_game_state_t* state, const struct kai
 
 /**
 	Expand the given node without doing any pruning.
+
+	This will return the evaluation value propagated from the child nodes of this state.
+	The parameter node will have its selected_move and node_count fields set.
 */
-kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, const struct kai_minimax_node_t* node, const struct kai_board_state_t* previous_board_state, unsigned int depth);
+kai_evaluation_t kai_minimax_expand_node(struct kai_game_state_t* state, struct kai_minimax_node_t* node, const struct kai_board_state_t* previous_board_state, unsigned int depth, const struct kai_timer_t* timer);
 
 /**
 	Calculate the evaluation (heuristic) value for a given board state (from the perspective of the player).

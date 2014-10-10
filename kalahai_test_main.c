@@ -146,19 +146,34 @@ void test_play_move()
 
 void test_minimax()
 {
-	// Setup a game state.
 	int move;
 	struct kai_game_state_t game_state;
-	const char* board_string = "0;6;6;6;6;6;6;0;6;6;6;6;6;6;1";
+	const char* board_string;
 
+	// Test a state where one player has more than half the seeds. The first non-empty ambo should be chosen.
+	board_string = "5;0;0;1;5;0;5;40;0;15;0;1;0;0;1";
 	game_state.player_id = 1;
 	game_state.player_first_ambo = 0;
+	game_state.player_end_ambo = 5;
 	game_state.player_house_ambo = 6;
 	game_state.opponent_first_ambo = 7;
+	game_state.opponent_end_ambo = 12;
 	game_state.opponent_house_ambo = 13;
 	kai_parse_board_state(&game_state.board_state, board_string);
-	
-	// The first move should be the ambo that will land in our house and score us an extra move.
+	move = kai_minimax_make_move(&game_state);
+	assert_eq(move, 2);
+
+	// Test the starting state. The first ambo should be chosen, since it scores us an extra move.
+	board_string = "0;6;6;6;6;6;6;0;6;6;6;6;6;6;1";
+	game_state.player_id = 1;
+	game_state.player_first_ambo = 0;
+	game_state.player_end_ambo = 5;
+	game_state.player_house_ambo = 6;
+	game_state.opponent_first_ambo = 7;
+	game_state.opponent_end_ambo = 12;
+	game_state.opponent_house_ambo = 13;
+	kai_parse_board_state(&game_state.board_state, board_string);
+
 	move = kai_minimax_make_move(&game_state);
 	assert_eq(move, 1);
 }
