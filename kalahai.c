@@ -394,20 +394,40 @@ int kai_random_make_move(struct kai_game_state_t* state)
 
 int kai_minimax_make_move(struct kai_game_state_t* state)
 {
+	int node_count_total = 0;
+	int selected_move = -1;
+	int i = 0;
+	int depth = 0;
+	int depth_progression[] = { KAI_MINIMAX_START_DEPTH, 2, 2 };
+	int depth_progression_count = sizeof(depth_progression) / sizeof(int);
 	struct kai_timer_t timer;
 	struct kai_minimax_node_t root;
 	memcpy(&root.state, &state->board_state, sizeof(state->board_state));
 	root.node_count = 0;
 	
 	kai_timer_start(&timer);
-	kai_minimax_expand_node(state, &root, NULL, KAI_MINIMAX_START_DEPTH, &timer);
-	fprintf(stdout, "Searched %d nodes in %f seconds.\n", root.node_count, root.time);
+	do
+	{
+		depth += (i < depth_progression_count) ? depth_progression[i] : 1;
+
+		kai_minimax_expand_node(state, &root, NULL, depth, &timer);
+
+		++i;
+		node_count_total += root.node_count;
+		selected_move = root.selected_move;
+		if (root.selected_move == -1)
+			break;
+	} while (root.time < KAI_MINIMAX_TIME_LIMIT);
+
+	fprintf(stdout, "Searched %d nodes in %f seconds (%d iterations to depth %d). %d nodes wasted in last iteration.\n", node_count_total, root.time, i, depth, root.node_count);
 
 	// Check if we ran out of time.
+	/*
 	if (root.time > KAI_MINIMAX_TIME_LIMIT)
 	{
-		return -1;
+		return selected_move;
 	}
+	*/
 
 	// Check if we did not find a move.
 	if (root.selected_move == -1)
