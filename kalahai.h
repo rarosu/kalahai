@@ -67,15 +67,18 @@
 #define KAI_NORTH_END 12
 #define KAI_NORTH_HOUSE 13
 
+// Define game specific constants
+#define KAI_SEED_TOTAL 72
+#define KAI_SEED_WIN_THRESHOLD 37
+
 // Define default values.
 #define KAI_DEFAULT_PORT "10101"
 #define KAI_DEFAULT_SERVER_ADDRESS "127.0.0.1"
 
 // Define minimax constants
-#define KAI_MINIMAX_TIME_LIMIT 24.9
-#define KAI_MINIMAX_START_DEPTH 7
+#define KAI_MINIMAX_TIME_LIMIT 4.9
+#define KAI_MINIMAX_START_DEPTH 8
 #define KAI_MINIMAX_EVALUATION_HOUSE_SEED_WEIGHT 4
-#define KAI_MINIMAX_EVALUATION_EMPTY_AMBO_WEIGHT 2
 #define KAI_MINIMAX_EVALUATION_EXTRA_TURN_TERM 50
 
 #define KAI_EVALUATION_MIN SHRT_MIN
@@ -186,6 +189,10 @@ struct kai_minimax_node_t
 	// The state of the board.
 	struct kai_board_state_t state;
 
+	// Evaluation values for the alpha-beta pruning.
+	kai_evaluation_t alpha;
+	kai_evaluation_t beta;
+
 	// The number of nodes that has been counted in the tree below this node.
 	int node_count;
 
@@ -252,7 +259,8 @@ int kai_parse_int(const char* number_string, int char_count);
 int kai_parse_board_state(struct kai_board_state_t* board_state, const char* board_string);
 
 /**
-	Returns 1 if one player has no more seeds in their ambos. 0 otherwise.
+	Returns 1 if all the seeds are in the houses. 0 otherwise. This should always be the case after a player has
+	run out of seeds.
 */
 int kai_is_game_over(const struct kai_board_state_t* board_state);
 
@@ -267,11 +275,6 @@ int kai_random_make_move(struct kai_game_state_t* state);
 	Make a move using the minimax algorithm without any pruning.
 */
 int kai_minimax_make_move(struct kai_game_state_t* state);
-
-/**
-	Returns the best evaluated move by searching the game tree to a specified depth.
-*/
-int kai_minimax_search_to_depth(struct kai_game_state_t* state, const struct kai_minimax_node_t* root, unsigned int depth);
 
 /**
 	Expand the given node without doing any pruning.
