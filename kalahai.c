@@ -408,23 +408,13 @@ int kai_minimax_make_move(struct kai_game_state_t* state)
 		}
 
 		if (selected_move == -1)
-		{
-			fprintf(stdout, "Breaking due to finding no move\n");
 			break;
-		}
 		
 		if (root.node_count == previous_node_count)
-		{
-			fprintf(stdout, "Breaking due node_count %d = previous_node_count %d\n", root.node_count, previous_node_count);
 			break;
-		}
 			
 		if (root.time >= KAI_MINIMAX_TIME_LIMIT)
-		{
-			fprintf(stdout, "Breaking due to time limit reached\n");
 			break;
-		}
-			
 
 		previous_node_count = root.node_count;
 	} while (1);
@@ -541,7 +531,6 @@ kai_evaluation_t kai_minimax_node_evaluation(const struct kai_game_state_t* stat
 {
 	kai_evaluation_t evaluation = 0;
 	kai_ambo_index_t ambo;
-	kai_ambo_index_t target;
 
 	// A terminal state should always yield the highest or lowest evaluation scores.
 	// Having more than half the seeds secured in a house is a terminal state.
